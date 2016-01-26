@@ -1,81 +1,59 @@
 class RPCchecker
-
-  HEADER_FORMAT = ['NNN','NNNNNNNNNN','NN','NNNNNNNNNNNN','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA','NNNNNNNNNNNNNNN','NNNNNN','NNNN','NNNNNN','NNN','AAAAAAAAA']
-  HEADER_LENGTH = 100
-  DETAIL_FORMAT = ['NNN','NNNNNNNNNN','NN','NNNNNNNN','NNNN','NNN','NNNNNNNN','AAAAAAAAAAAAAAAAAAAA','NNN','NNNNNNNNNNNNNNN','NNNNNN','AAA','AAAA','NNNNNN','AAAAAAAAAA']
-  DETAIL_LENGTH = 105
-  TRAILER_FORMAT = ['NNN','NNNNNNNNNN','NN','NNNNNNNNNNNN','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA','NNNNNNNNNNNNNNN','NNNNNN','NNNNNN','AAAAAAAAAA']
-  TRAILER_LENGTH = 98
-
-  def self.check_format(value, type, length)
+  def self.check_regex_format(value, type, length)
     case type
-      when 'N'
-        return true if value == value.match(/[[:digit:]]{#{length}}/).to_s #regex checking numeric characters
+      when 'N' #regex checking numeric characters
+        return true if value == value.match(/[[:digit:]]{#{length}}/).to_s
 
-      when 'A'
-        return true if value == value.match(/(?=[[:alnum:] ]{#{length}})[[:alnum:]]{0,#{length}} {0,#{length}}/).to_s #regex checking alphanumeric characters (right padded with spaces)
+      when 'A' #regex checking alphanumeric characters (right padded with spaces)
+        return true if value == value.match(/(?=[[:alnum:] ]{#{length}})[[:alnum:]]{0,#{length}} {0,#{length}}/).to_s
     end
 
     return false
   end
 
-  def self.check_header_format(line)
-    if line.length == (HEADER_LENGTH) #checks if line length is correct
+  def self.check_format(line, predefined_length, predefined_format, msg)
+    if line.length == (predefined_length) #checks if line length is correct
       position = 0
-      HEADER_FORMAT.each do |format|
+      predefined_format.each do |format|
         value = line[position,format.length]
         position += format.length
-        if check_format(value, format[0], format.length) == false
-          puts "HEADER format is invalid"
+        if check_regex_format(value, format[0], format.length) == false
+          puts msg
           break
         end
       end
     else
-      puts "HEADER format is invalid"
+      puts msg
     end
   end
 
-  def self.check_detail_format(line, number)
-    if line.length == (DETAIL_LENGTH) #checks if line length is correct
-      position = 0
-      DETAIL_FORMAT.each do |format|
-        value = line[position,format.length]
-        position += format.length
-        if check_format(value, format[0], format.length) == false
-          puts "Format on line #{number} is invalid"
-          break
-        end
-      end
-    else
-      puts "Format on line #{number} is invalid"
-    end
-  end
-
-  def self.check_trailer_format(line)
-    if line.length == (TRAILER_LENGTH) #checks if line length is correct
-      position = 0
-      TRAILER_FORMAT.each do |format|
-        value = line[position,format.length]
-        position += format.length
-        if check_format(value, format[0], format.length) == false
-          puts "TRAILER format is invalid"
-          break
-        end
-      end
-    else
-      puts "TRAILER format is invalid"
-    end
-  end
 end
 
 class FileChecker
+
+  HEADER_FORMAT = %w(NNN NNNNNNNNNN NN NNNNNNNNNNNN AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA NNNNNNNNNNNNNNN NNNNNN
+                     NNNN NNNNNN NNN AAAAAAAAA)
+
+  DETAIL_FORMAT = %w(NNN NNNNNNNNNN NN NNNNNNNN NNNN NNN NNNNNNNN AAAAAAAAAAAAAAAAAAAA NNN
+                     NNNNNNNNNNNNNNN NNNNNN AAA AAAA NNNNNN AAAAAAAAAA)
+
+  TRAILER_FORMAT = %w(NNN NNNNNNNNNN NN NNNNNNNNNNNN AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA NNNNNNNNNNNNNNN
+                      NNNNNN NNNNNN AAAAAAAAAA)
+
+  def self.compute_length(format)
+    lengths = format.collect {|x| x.length}
+    length = lengths.inject { |sum,x| sum + x}
+    return length
+  end
+
   file = File.open("#{ARGV[0]}", 'r')
   file.each_with_index do |line, index|
     line = line.gsub(/\r?\n?/, '') #removes newline character (handles all possible cases \n, \r, \r\n)
     if index == 0
-      RPCchecker.check_header_format(line)
+      RPCchecker.check_format(line, compute_length(HEADER_FORMAT), HEADER_FORMAT, "HEADER format is invalid")
     else
-      file.eof? ? RPCchecker.check_trailer_format(line) : RPCchecker.check_detail_format(line, index)
+      file.eof? ? RPCchecker.check_format(line, compute_length(TRAILER_FORMAT), TRAILER_FORMAT, "TRAILER format is invalid")
+                : RPCchecker.check_format(line, compute_length(DETAIL_FORMAT), DETAIL_FORMAT, "Format on line #{index} is invalid")
     end
   end
 end
