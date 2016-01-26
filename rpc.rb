@@ -1,4 +1,4 @@
-class FileChecker
+class RPCchecker
 
   HEADER_FORMAT = ['NNN','NNNNNNNNNN','NN','NNNNNNNNNNNN','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA','NNNNNNNNNNNNNNN','NNNNNN','NNNN','NNNNNN','NNN','AAAAAAAAA']
   HEADER_LENGTH = 100
@@ -10,10 +10,10 @@ class FileChecker
   def self.check_format(value, type, length)
     case type
       when 'N'
-        return true if value == value.match(/[[:digit:]]{#{length}}/).to_s
+        return true if value == value.match(/[[:digit:]]{#{length}}/).to_s #regex checking numeric characters
 
       when 'A'
-        return true if value == value.match(/(?=[[:alnum:] ]{#{length}})[[:alnum:]]{0,#{length}} {0,#{length}}/).to_s
+        return true if value == value.match(/(?=[[:alnum:] ]{#{length}})[[:alnum:]]{0,#{length}} {0,#{length}}/).to_s #regex checking alphanumeric characters (right padded with spaces)
     end
 
     return false
@@ -66,13 +66,16 @@ class FileChecker
       puts "TRAILER format is invalid"
     end
   end
+end
 
-  file = File.open('VSTUP.DAT', 'r')
+class FileChecker
+  file = File.open("#{ARGV[0]}", 'r')
   file.each_with_index do |line, index|
     line = line.gsub(/\r?\n?/, '') #removes newline character (handles all possible cases \n, \r, \r\n)
-    check_header_format(line) if index == 0
-    check_trailer_format(line) if file.eof?
-    check_detail_format(line, index) if index != 0 && file.eof? == false
+    if index == 0
+      RPCchecker.check_header_format(line)
+    else
+      file.eof? ? RPCchecker.check_trailer_format(line) : RPCchecker.check_detail_format(line, index)
+    end
   end
-
 end
