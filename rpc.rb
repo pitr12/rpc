@@ -10,7 +10,7 @@ class FormatChecker
       when 'N', 'R', 'D' #regex checking numeric characters
         return true if value == value.match(/[0-9]{#{length}}/).to_s
 
-      when 'A' #regex checking alphanumeric characters (right padded with spaces)
+      when 'A', 'C' #regex checking alphanumeric characters (right padded with spaces)
         return true if value == value.match(/(?=[[:alnum:] ]{#{length}})[[:alnum:]]{0,#{length}} {0,#{length}}/).to_s
     end
 
@@ -42,11 +42,12 @@ class FileChecker
   #   A = alphanumeric
   #   R = row_number(numeric)
   #   D = date(numeric)
+  #   C = credit_card_number(alphanumeric)
 
   HEADER_FORMAT = %w(NNN NNNNNNNNNN NN NNNNNNNNNNNN AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA NNNNNNNNNNNNNNN NNNNNN
                      NNNN RRRRRR NNN AAAAAAAAA)
 
-  DETAIL_FORMAT = %w(NNN NNNNNNNNNN NN DDDDDDDD NNNN NNN DDDDDDDD AAAAAAAAAAAAAAAAAAAA NNN
+  DETAIL_FORMAT = %w(NNN NNNNNNNNNN NN DDDDDDDD NNNN NNN DDDDDDDD CCCCCCCCCCCCCCCCCCCC NNN
                      NNNNNNNNNNNNNNN NNNNNN AAA AAAA RRRRRR AAAAAAAAAA)
 
   TRAILER_FORMAT = %w(NNN NNNNNNNNNN NN NNNNNNNNNNNN AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA NNNNNNNNNNNNNNN
@@ -54,6 +55,7 @@ class FileChecker
 
   ROW_NUMBERS_LENGTH = 6
   DATE_LENGTH = 8
+  CREDIT_CARD_NUMBER_LENGTH = 20
 
   # computes length of predefined format
   def self.compute_length(format)
@@ -63,8 +65,6 @@ class FileChecker
   end
 
   # checks row numbering
-
-
   def self.check_row_numbering(line,number,format, type)
     #check if format contains R's = rows are numbered and if numbering is correct
     format = format.join('')
@@ -102,6 +102,7 @@ class FileChecker
     return dates
   end
 
+  # checks if dates are valid
   def self.check_dates(dates,number)
     dates.each do |date|
       date = date.to_s
@@ -115,6 +116,7 @@ class FileChecker
     end
   end
 
+  # identifies duplicate rows
   def self.check_duplicate_rows(lines)
     duplicate_lines = lines.select{|element| lines.count(element) > 1 }
     duplicate_lines.uniq.each do |duplicate|
@@ -124,7 +126,37 @@ class FileChecker
         puts "Lines #{original_lines.inspect} are duplicate!"
       end
     end
+  end
 
+  # extracts card number based on predefined format
+  def self.extract_card_number(line)
+    #check if format contains C's = contains credit card number
+    format = DETAIL_FORMAT.join('')
+    index = format.index('C')
+    if index && (format[index,CREDIT_CARD_NUMBER_LENGTH] == "C" * CREDIT_CARD_NUMBER_LENGTH)
+        number = line[index,CREDIT_CARD_NUMBER_LENGTH].to_i
+        return number
+    else
+      puts "Format of DETAIL does not have credit card number correctly defined"
+      return false
+    end
+  end
+
+  # checks if card number is valid (Luhn algorithm)
+  def self.check_card_number(line,row_number)
+    number = extract_card_number(line)
+    if number
+      checksum = ''
+      number.to_s.split('').reverse.each_with_index do |n,i|
+        checksum += n if i%2 == 0
+        checksum += (n.to_i * 2).to_s if i%2 == 1
+      end
+
+      sum = checksum.split('').inject(0) { |sum,x| sum + x.to_i}
+      if sum % 10 != 0
+        puts "Credit card number on line #{row_number + 1} is not valid"
+      end
+    end
   end
 
   # iterates through whole file and checks all lines
@@ -144,6 +176,7 @@ class FileChecker
       else # DETAIL
         FormatChecker.check_format(line, compute_length(DETAIL_FORMAT), DETAIL_FORMAT, "Format on line #{index} is invalid")
         check_dates(extract_dates(line, DETAIL_FORMAT, "DETAIL"),index)
+        check_card_number(line, index)
         line = check_row_numbering(line, index, DETAIL_FORMAT, "DETAIL")
       end
     end
