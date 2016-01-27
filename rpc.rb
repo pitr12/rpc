@@ -1,3 +1,7 @@
+# RPC file structure and content checker
+# author: Peter Dubec
+# email: peter.dubec93@gmail.com
+
 require 'date'
 
 class FormatChecker
@@ -68,11 +72,14 @@ class FileChecker
     if index && (format[index,ROW_NUMBERS_LENGTH] == "R" * ROW_NUMBERS_LENGTH)
       if number != line[index,ROW_NUMBERS_LENGTH].to_i
         actual_number = line[index,ROW_NUMBERS_LENGTH].to_i
-        puts  "Row number of row #{number} is incorrect. Number = #{actual_number} (correct number = #{number})"
+        puts  "Row number of row #{number + 1} is incorrect. Number = #{actual_number} (correct number = #{number})"
       end
+      line[index,ROW_NUMBERS_LENGTH] = '0' * ROW_NUMBERS_LENGTH #removes line numbering (for later duplicate row identifying)
     else
       puts "Format of #{type} does not have line numbering correctly defined"
     end
+
+    return line
   end
 
   # extracts dates based on predefined format
@@ -101,31 +108,49 @@ class FileChecker
       year = date[4,4].to_i
       month = date[2,2].to_i
       day = date[0,2].to_i
-      if Date.valid_date?(year, month, day) == false
-       puts "Date #{day}/#{month}/#{year} on line #{number} is not valid."
+      if !Date.valid_date?(year, month, day)
+       puts "Date #{day}/#{month}/#{year} on line #{number + 1} is not valid."
       end
 
     end
+  end
+
+  def self.check_duplicate_rows(lines)
+    duplicate_lines = lines.select{|element| lines.count(element) > 1 }
+    duplicate_lines.uniq.each do |duplicate|
+      original_lines = lines.each_index.select{|i| lines[i] == duplicate;}
+      if original_lines
+        original_lines.map! {|x| x+1}
+        puts "Lines #{original_lines.inspect} are duplicate!"
+      end
+    end
+
   end
 
   # iterates through whole file and checks all lines
   file = File.open("#{ARGV[0]}", 'r')
+  all_lines = []
   file.each_with_index do |line, index|
     line = line.gsub(/\r?\n?/, '') #removes newline character (handles all possible cases \n, \r, \r\n)
     if index == 0 # HEADER
       FormatChecker.check_format(line, compute_length(HEADER_FORMAT), HEADER_FORMAT, "HEADER format is invalid")
-      check_row_numbering(line, index, HEADER_FORMAT, "HEADER")
       check_dates(extract_dates(line, HEADER_FORMAT, "HEADER"),index)
+      line = check_row_numbering(line, index, HEADER_FORMAT, "HEADER")
     else
       if file.eof? # TRAILER
         FormatChecker.check_format(line, compute_length(TRAILER_FORMAT), TRAILER_FORMAT, "TRAILER format is invalid")
-        check_row_numbering(line, index, TRAILER_FORMAT, "TRAILER")
         check_dates(extract_dates(line, TRAILER_FORMAT, "TRAILER"),index)
+        line = check_row_numbering(line, index, TRAILER_FORMAT, "TRAILER")
       else # DETAIL
         FormatChecker.check_format(line, compute_length(DETAIL_FORMAT), DETAIL_FORMAT, "Format on line #{index} is invalid")
-        check_row_numbering(line, index, DETAIL_FORMAT, "DETAIL")
         check_dates(extract_dates(line, DETAIL_FORMAT, "DETAIL"),index)
+        line = check_row_numbering(line, index, DETAIL_FORMAT, "DETAIL")
       end
     end
+
+    all_lines << line
   end
+
+  #finds all duplicate rows in file
+  check_duplicate_rows(all_lines)
 end
